@@ -1,0 +1,126 @@
+﻿@{
+    ViewData["Title"] = "Home Page";
+}
+
+@model IndexViewModel
+
+<div class="text-center">
+    <div style="display:flex;gap:25px;justify-content:center;align-items:center;">
+        <div style="display:flex;flex-direction:column;gap:20px;">
+            <h1>Create Channel</h1>
+            <form asp-controller="Home" asp-action="CreateChannelOnRedis" method="post">
+                <input name="channelName" id="channelNameInput" placeholder="Enter Channel Name" style="padding:10px 12px" />
+                <button id="btn" type="submit" disabled>Make Channel</button>
+                <p style="color:springgreen;font-size:20px;text-transform:uppercase;font-family:'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif">
+                    @(ViewBag.SuccessMessage != null ? "Channel Created With Success." : "")
+                </p>
+            </form>
+
+            <h2>
+                @(Model.Channels.Count == 0 ? "Channel List is empty now ." : "List of Channels")
+            </h2>
+
+            <ul id="listOfChannelNames" style="list-style:none;">
+                @foreach (var channel in Model.Channels)
+                {
+                    foreach (var key in channel.Keys)
+                    {
+                        <li onclick="getSelectedChannelMessages('@key')" style="border:3px solid springgreen;border-radius:50px;padding:10px 5px;cursor:pointer;">
+                            <strong>Channel: @key</strong>
+                        </li>
+
+                    }
+                }
+            </ul>
+
+        </div>
+        
+        <div>
+            <div id="messages" style="display:flex;flex-direction:column;height:300px;width:400px;overflow-y:scroll;border:1px solid gray;padding:10px;">
+                <p>Select a channel to see messages.</p>
+            </div>
+            <div id="sendMessageDiv" style="display:none;gap:10px;">
+                <input id="writeMessage" placeholder="Write a message ..."/>
+                <button id="btn2" onclick="sendMessage()" disabled>Send</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentChannel;
+
+    let input = document.getElementById("channelNameInput");
+    let writeMsgInput = document.getElementById('writeMessage');
+
+    input.addEventListener("input", (e) => {
+        let btn = document.getElementById("btn");
+        btn.disabled = e.target.value === "";
+    });
+
+    writeMsgInput.addEventListener("input", (e) => {
+        let btn2 = document.getElementById("btn2");
+        btn2.disabled = e.target.value === "" ;
+    });
+
+    // Fetch messages for the selected channel
+    async function getSelectedChannelMessages(channelName) {
+        try {
+            const response = await fetch(`/Home/GetSelectedChannelMessages?channelName=${encodeURIComponent(channelName)}`);
+            if (!response.ok) {
+                throw new Error("Failed to fetch channel messages.");
+            }
+            const messages = await response.json();
+            console.log(messages);
+            displayMessages(messages, channelName);
+            const sendMessageDiv = document.getElementById('sendMessageDiv');
+            sendMessageDiv.style.display = "flex";
+        } catch (error) {
+            console.error(error);
+            alert("Error fetching messages. Please try again.");
+        }
+    }
+
+    // Display messages in the messages container
+    function displayMessages(messages, channelName) {
+        const container = document.getElementById("messages");
+        currentChannel = channelName;
+        container.innerHTML = `<h3>Messages for Channel: ${channelName}</h3>`;
+        if (messages.length === 0) {
+            container.innerHTML += "<p>No messages in this channel.</p>";
+        } else {
+            const messageList = document.createElement("ul");
+            messageList.style.listStyle = "none";
+            messages.forEach((msg) => {
+                const li = document.createElement("li");
+                li.textContent = msg;
+                messageList.appendChild(li);
+            });
+            container.appendChild(messageList);
+        }
+    }
+
+    // Sending message to current channel
+    async function sendMessage() {
+        const msg = document.getElementById('writeMessage').value;
+
+        if (!msg || !currentChannel) return;
+
+        // Add message to the list of messages in Redis
+        try {
+            const response = await fetch(`/Home/SendMessage?channelName=${encodeURIComponent(currentChannel)}&message=${encodeURIComponent(msg)}`, {
+                method: 'POST'
+            });
+            if (response.ok) {
+                getSelectedChannelMessages(currentChannel);  // Show the new message immediately
+            } else {
+                alert("Error sending message.");
+            }
+        } catch (error) {
+            console.error("Error:", error);
+            alert("Error sending message.");
+        }
+
+        document.getElementById('writeMessage').value = '';  // Clear the input
+    }
+</script>
